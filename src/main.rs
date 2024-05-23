@@ -46,15 +46,21 @@ fn main() {
         .init_resource::<MyWorldCoords>()
         .add_plugins(DefaultPlugins)
         //.add_systems(Startup, (setup.before(render_cards), render_cards))
-        .add_systems(Startup, load_cards)
-        .add_systems(Update, (spin, move_camera,my_cursor_system))
+        .add_systems(Startup, (setup.before(load_cards), load_cards))
+        .add_systems(Update, move_camera)
+        //.add_systems(Update, (spin, move_camera, my_cursor_system))
         .run();
 }
 
-// fn setup(mut commands: Commands, windows: Query<&Window>, asset_server: Res<AssetServer>) {
-//     commands.spawn(Camera2dBundle::default());
-//     load_cards(commands, asset_server);
-// }
+fn setup(mut commands: Commands, windows: Query<&Window>, asset_server: Res<AssetServer>) {
+    let mut camera = Camera2dBundle::default();
+    camera.transform = Transform::from_xyz(0., 0., 0.);
+    camera.projection.scaling_mode = ScalingMode::AutoMax {
+        max_width: 3800.,
+        max_height: 2100.,
+    };
+    commands.spawn((camera, MainCamera));
+}
 
 #[derive(Clone, Copy, Debug)]
 enum Suit {
@@ -87,23 +93,13 @@ struct Deck {
     size: usize,
 }
 fn load_cards(mut commands: Commands, windows: Query<&Window>, asset_server: Res<AssetServer>) {
-    let mut camera = Camera2dBundle::default();
-
     let window = windows.single();
 
     let ceiling = window.height() / 2.;
-    let ground = -window.height() / 2.;
+    let _ground = -window.height() / 2.;
 
-    let wall_left: f32 = -window.width() / 2.;
+    let _wall_left: f32 = -window.width() / 2.;
     let wall_right: f32 = window.width() / 2.;
-
-    camera.projection.scaling_mode = ScalingMode::AutoMax {
-        max_width: 3800.,
-        max_height: 2100.,
-    };
-    camera.transform = Transform::from_xyz(0., 0., 0.);
-
-    commands.spawn((camera, MainCamera));
 
     let suits = Vec::from([Suit::Hearts, Suit::Clubs, Suit::Spades, Suit::Diamonds]);
     let numbers = vec![
@@ -125,7 +121,7 @@ fn load_cards(mut commands: Commands, windows: Query<&Window>, asset_server: Res
                 value: val as i8,
                 suit: *suit,
             };
-            let cid = commands.spawn((
+            commands.spawn((
                 card,
                 SpriteBundle {
                     sprite: Sprite {
@@ -140,28 +136,8 @@ fn load_cards(mut commands: Commands, windows: Query<&Window>, asset_server: Res
             ));
         }
     }
-
-    // for i in 0..card_count {
-    //     let card: GameCard = GameCard {
-    //         entity: {
-    //             commands
-    //                 .spawn(SpriteBundle {
-    //                     sprite: Sprite {
-    //                         anchor: bevy::sprite::Anchor::TopLeft,
-    //                         ..default()
-    //                     },
-    //                     texture: card_back_img.clone(),
-    //                     ..default()
-    //                 })
-    //                 .id()
-    //         },
-    //         position: Position { x: 0, y: 0 },
-    //         front_texture: 0,
-    //     };
-
-    //     cards.push(card)
-    // }
 }
+
 fn spin(windows: Query<&Window>, mut query: Query<(Entity, &GameCard, &mut Transform)>) {
     for (entity, card, mut e) in &mut query {
         e.rotate_local_y(PI / 180.);
@@ -183,56 +159,10 @@ fn move_camera(
     ) else {
         return;
     };
-    dbg!(camera_transform);
+
     camera_transform = &camera_transform.with_translation(Vec3 {
         x: point.x,
         y: point.y,
         z: 0.0,
     });
-    dbg!(point);
-}
-fn render_cards(windows: Query<&Window>, mut query: Query<(Entity, &GameCard, &mut Transform)>) {
-    let window = windows.single();
-
-    let ceiling = window.height() / 2.;
-    let ground = -window.height() / 2.;
-
-    let wall_left: f32 = -window.width() / 2.;
-    let wall_right: f32 = window.width() / 2.;
-    dbg!(ceiling);
-    dbg!(ground);
-    dbg!(wall_left);
-    dbg!(wall_right);
-    let mut i: i32 = 0;
-    let mut j: i32 = 0;
-    for (entity, card, mut e) in &mut query {
-        //dbg!(entity);
-        //dbg!(card);
-        let mut row: i32 = 0;
-        match card.suit {
-            Suit::Clubs => {
-                row = 1;
-            }
-            Suit::Diamonds => {
-                row = 2;
-            }
-            Suit::Hearts => {
-                row = 3;
-            }
-            Suit::Spades => {
-                row = 4;
-            }
-        }
-        //*e = Transform::from_xyz((j as f32 * 140.)+(140./2.), (row as f32 * 190.)+(190./2.), 1.);
-        //e.translation.x = wall_left + (j as f32 * 140.0);
-        //e.translation.y = ceiling - (row as f32 * 190.0);
-        dbg!(e.translation.x);
-        dbg!(e.translation.y);
-        i += 1;
-        if i % 13 == 0 {
-            j += 1;
-        }
-        dbg!(i);
-        dbg!(j);
-    }
 }
