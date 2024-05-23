@@ -1,0 +1,8 @@
+{
+    "environment": [
+        {"name":"PATH", "value":"%USERPROFILE%/.rustup/toolchains/stable-x86_64-pc-windows-msvc/bin;${workspaceFolder}/target/debug/deps;%PATH%",}
+        
+        // Switch `nightly` to `stable` if you're using Rust stable
+    ],
+    "env" : { "CARGO_MANIFEST_DIR" : "${workspaceFolder}" }
+}
