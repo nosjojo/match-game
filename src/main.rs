@@ -1,12 +1,7 @@
+use bevy::render::view::visibility;
 use bevy::window::PrimaryWindow;
-use bevy::{
-    prelude::*,
-    render::camera::{self, ScalingMode},
-    transform::commands,
-    utils::dbg,
-    window::WindowResolution,
-};
-use std::{f32::consts::PI, fmt};
+use bevy::{prelude::*, render::camera::ScalingMode};
+use std::fmt;
 
 /// We will store the world position of the mouse cursor here.
 #[derive(Resource, Default)]
@@ -16,43 +11,46 @@ struct MyWorldCoords(Vec2);
 #[derive(Component)]
 struct MainCamera;
 
+fn main() {
+    App::new()
+        .init_resource::<MyWorldCoords>()
+        .add_plugins(DefaultPlugins)
+        .add_systems(Startup, (setup.before(load_cards), load_cards))
+        .add_systems(Update, (my_cursor_system, spin))
+        .run();
+}
+
+// example code
 fn my_cursor_system(
+    keys: Res<ButtonInput<KeyCode>>,
     mut mycoords: ResMut<MyWorldCoords>,
     // query to get the window (so we can read the current cursor position)
     q_window: Query<&Window, With<PrimaryWindow>>,
     // query to get camera transform
     q_camera: Query<(&Camera, &GlobalTransform), With<MainCamera>>,
 ) {
-    // get the camera info and transform
-    // assuming there is exactly one main camera entity, so Query::single() is OK
-    let (camera, camera_transform) = q_camera.single();
+    if keys.just_pressed(KeyCode::Space) {
+        // get the camera info and transform
+        // assuming there is exactly one main camera entity, so Query::single() is OK
+        let (camera, camera_transform) = q_camera.single();
 
-    // There is only one primary window, so we can similarly get it from the query:
-    let window = q_window.single();
+        // There is only one primary window, so we can similarly get it from the query:
+        let window = q_window.single();
 
-    // check if the cursor is inside the window and get its position
-    // then, ask bevy to convert into world coordinates, and truncate to discard Z
-    if let Some(world_position) = window
-        .cursor_position()
-        .and_then(|cursor| camera.viewport_to_world(camera_transform, cursor))
-        .map(|ray| ray.origin.truncate())
-    {
-        mycoords.0 = world_position;
-        eprintln!("World coords: {}/{}", world_position.x, world_position.y);
+        // check if the cursor is inside the window and get its position
+        // then, ask bevy to convert into world coordinates, and truncate to discard Z
+        if let Some(world_position) = window
+            .cursor_position()
+            .and_then(|cursor| camera.viewport_to_world(camera_transform, cursor))
+            .map(|ray| ray.origin.truncate())
+        {
+            mycoords.0 = world_position;
+            eprintln!("World coords: {}/{}", world_position.x, world_position.y);
+        }
     }
 }
-fn main() {
-    App::new()
-        .init_resource::<MyWorldCoords>()
-        .add_plugins(DefaultPlugins)
-        //.add_systems(Startup, (setup.before(render_cards), render_cards))
-        .add_systems(Startup, (setup.before(load_cards), load_cards))
-        .add_systems(Update, move_camera)
-        //.add_systems(Update, (spin, move_camera, my_cursor_system))
-        .run();
-}
 
-fn setup(mut commands: Commands, windows: Query<&Window>, asset_server: Res<AssetServer>) {
+fn setup(mut commands: Commands) {
     let mut camera = Camera2dBundle::default();
     camera.transform = Transform::from_xyz(0., 0., 0.);
     camera.projection.scaling_mode = ScalingMode::AutoMax {
@@ -62,7 +60,7 @@ fn setup(mut commands: Commands, windows: Query<&Window>, asset_server: Res<Asse
     commands.spawn((camera, MainCamera));
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 enum Suit {
     Hearts,
     Clubs,
@@ -80,12 +78,34 @@ impl fmt::Display for Suit {
     }
 }
 
+#[derive(Clone, Copy, Debug)]
+enum Value {
+    Ace = 1,
+    Two,
+    Three,
+    Four,
+    Five,
+    Six,
+    Seven,
+    Eight,
+    Nine,
+    Ten,
+    Jack,
+    Queen,
+    King,
+}
+
 #[derive(Component, Debug)]
 struct GameCard {
-    front_texture: i32,
+    front_texture: Entity,
     value: i8,
     suit: Suit,
 }
+
+#[derive(Component, Debug)]
+struct Card;
+#[derive(Component, Debug)]
+struct CardBack;
 
 #[derive(Component)]
 struct Deck {
@@ -106,63 +126,85 @@ fn load_cards(mut commands: Commands, windows: Query<&Window>, asset_server: Res
         "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K", "A",
     ];
 
-    let mut cards: Vec<GameCard> = Vec::with_capacity(suits.len() * numbers.len());
+    let back_path = "cards/cardBack_blue2.png";
+    let back_sprite: Handle<Image> = asset_server.load(back_path);
+
     for (x, suit) in suits.iter().enumerate() {
         for (val, num) in numbers.iter().enumerate() {
-            let mut tform = Transform::from_xyz(
-                (val as f32 * 140.) + (140. / 2.) - wall_right,
-                (x as f32 * 190.) + (190. / 2.) - ceiling,
-                1.,
-            );
+            let tform = Transform::from_xyz(val as f32 * 140., x as f32 * 190., 1.);
+
+            let back_id = commands
+                .spawn((
+                    CardBack,
+                    Card,
+                    SpriteBundle {
+                        sprite: Sprite { ..default() },
+                        texture: back_sprite.clone(),
+                        transform: tform,
+                        global_transform: GlobalTransform::default(),
+                        visibility: Visibility::Hidden,
+                        ..default()
+                    },
+                ))
+                .id();
+
             let path = format!("cards/card{suit}{num}.png");
             let img = asset_server.load(path);
             let card: GameCard = GameCard {
-                front_texture: 0,
+                front_texture: back_id,
                 value: val as i8,
                 suit: *suit,
             };
-            commands.spawn((
-                card,
-                SpriteBundle {
-                    sprite: Sprite {
-                        anchor: bevy::sprite::Anchor::TopLeft,
+            let front_id = commands
+                .spawn((
+                    card,
+                    Card,
+                    SpriteBundle {
+                        sprite: Sprite { ..default() },
+                        texture: img.clone(),
+                        transform: Transform::from_xyz(val as f32 * 140., x as f32 * 190., 1.),
+                        global_transform: GlobalTransform::default(),
                         ..default()
                     },
-                    texture: img.clone(),
-                    transform: tform,
-                    global_transform: GlobalTransform::default(),
-                    ..default()
-                },
-            ));
+                ))
+                .id();
+
+            commands.entity(front_id).add_child(back_id);
         }
     }
 }
 
-fn spin(windows: Query<&Window>, mut query: Query<(Entity, &GameCard, &mut Transform)>) {
-    for (entity, card, mut e) in &mut query {
-        e.rotate_local_y(PI / 180.);
-    }
-}
-
-fn move_camera(
-    mut camera_query: Query<(&Camera, &GlobalTransform, &mut Transform)>,
+use std::f32::consts::PI;
+fn spin(
     windows: Query<&Window>,
+    mut query: Query<(Entity, &GameCard, &mut Transform, &Children)>,
+    mut children_query: Query<(Entity, &mut Visibility)>,
 ) {
-    let (camera, camera_global_transform, mut camera_transform) = camera_query.single();
-    let Some(point) = camera.world_to_viewport(
-        camera_global_transform,
-        Vec3 {
-            x: 0.,
-            y: 0.,
-            z: 0.,
-        },
-    ) else {
-        return;
-    };
+    for (entity, card, mut t, children) in &mut query {
+        t.rotate_local_y(PI / 180.);
 
-    camera_transform = &camera_transform.with_translation(Vec3 {
-        x: point.x,
-        y: point.y,
-        z: 0.0,
-    });
+        let (x, y, z) = t.rotation.to_euler(EulerRot::XYZ);
+        let angle = y * 180. / PI;
+        if card.suit == Suit::Diamonds && card.value == 2 {
+            if (y * 180. / PI) >= 45.0 || (y * 180. / PI) <= -45.0 {
+                for child in children {
+                    if let Ok((child_entity, mut vis)) = children_query.get_mut(*child) {
+                        *vis = Visibility::Visible;
+                    }
+                    if let Ok((child_entity, mut vis)) = children_query.get_mut(entity) {
+                        *vis = Visibility::Hidden;
+                    }
+                }
+            } else {
+                for child in children {
+                    if let Ok((child_entity, mut vis)) = children_query.get_mut(*child) {
+                        *vis = Visibility::Hidden;
+                    }
+                    if let Ok((child_entity, mut vis)) = children_query.get_mut(entity) {
+                        *vis = Visibility::Visible;
+                    }
+                }
+            }
+        }
+    }
 }
