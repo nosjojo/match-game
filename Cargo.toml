@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 bevy = "0.13"
+bevy_mod_picking = "0.18.2"
 
 # Enable a small amount of optimization in debug mode
 [profile.dev]
