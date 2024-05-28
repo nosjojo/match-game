@@ -2,8 +2,9 @@ use bevy::window::PrimaryWindow;
 use bevy::{prelude::*, render::camera::ScalingMode};
 use bevy_mod_picking::debug::DebugPickingMode;
 use bevy_mod_picking::events::{Click, Pointer};
+use bevy_mod_picking::prelude::*;
 use bevy_mod_picking::{DefaultPickingPlugins, PickableBundle};
-use std::f32::consts::PI;
+use std::f32::consts::{FRAC_PI_6, FRAC_PI_8, PI};
 use std::fmt;
 
 /// We will store the world position of the mouse cursor here.
@@ -20,7 +21,7 @@ fn main() {
         .add_plugins((DefaultPlugins, DefaultPickingPlugins))
         .insert_resource(DebugPickingMode::Normal)
         .add_systems(Startup, (setup.before(load_cards), load_cards))
-        .add_systems(Update, (flip_card, my_cursor_system))
+        .add_systems(Update, (my_cursor_system, dump_details, move_camera))
         .run();
 }
 
@@ -128,6 +129,7 @@ fn load_cards(mut commands: Commands, asset_server: Res<AssetServer>) {
             let back_id = commands
                 .spawn((
                     PickableBundle::default(),
+                    On::<Pointer<Click>>::run(flip_card),
                     player_back,
                     CardBack,
                     Card,
@@ -152,6 +154,7 @@ fn load_cards(mut commands: Commands, asset_server: Res<AssetServer>) {
             let front_id = commands
                 .spawn((
                     PickableBundle::default(),
+                    On::<Pointer<Click>>::run(flip_card),
                     player_front,
                     card,
                     Card,
@@ -192,13 +195,59 @@ fn animation_card_flip_half() -> AnimationClip {
 
 fn flip_card(
     mut query: Query<&mut AnimationPlayer>,
-    mut clicked: EventReader<Pointer<Click>>,
+    mut clicked: ListenerMut<Pointer<Click>>,
     mut animations: ResMut<Assets<AnimationClip>>,
 ) {
-    for item in clicked.read() {
-        if let Ok(mut player) = query.get_mut(item.target) {
-            player.play(animations.add(animation_card_flip_half()));
-            dbg!(item.target);
+    if let Ok(mut player) = query.get_mut(clicked.listener()) {
+        player.play(animations.add(animation_card_flip_half()));
+    }
+}
+
+fn dump_details(
+    mut sprite_query: Query<(&Transform, &Handle<Image>), With<Sprite>>,
+    assets: Res<Assets<Image>>,
+    keys: Res<ButtonInput<KeyCode>>,
+) {
+    if keys.just_pressed(KeyCode::F2) {
+        for (transform, image_handle) in &mut sprite_query {
+            let image_size = assets.get(image_handle).unwrap().size_f32();
+
+            info!("image_dimensions: {:?}", image_size);
+            info!("position: {:?}", transform.translation);
+            info!("scale: {:?}", transform.scale);
+
+            let scaled = image_size * transform.scale.truncate();
+            let bounding_box = Rect::from_center_size(transform.translation.truncate(), scaled);
+
+            info!("bounding_box: {:?}", bounding_box);
         }
+    }
+}
+
+fn move_camera(mut cameras: Query<&mut Transform, With<Camera>>, keys: Res<ButtonInput<KeyCode>>) {
+    if keys.just_pressed(KeyCode::KeyW) {
+        let mut transform = cameras.single_mut();
+        transform.translation.y += 10.;
+    } else if keys.just_pressed(KeyCode::KeyS) {
+        let mut transform = cameras.single_mut();
+        transform.translation.y -= 10.;
+    } else if keys.just_pressed(KeyCode::KeyA) {
+        let mut transform = cameras.single_mut();
+        transform.translation.x -= 10.;
+    } else if keys.just_pressed(KeyCode::KeyD) {
+        let mut transform = cameras.single_mut();
+        transform.translation.x += 10.;
+    } else if keys.just_pressed(KeyCode::KeyR) {
+        let mut transform = cameras.single_mut();
+        transform.translation.z -= 10.;
+    } else if keys.just_pressed(KeyCode::KeyF) {
+        let mut transform = cameras.single_mut();
+        transform.translation.z += 10.;
+    } else if keys.just_pressed(KeyCode::KeyQ) {
+        let mut transform = cameras.single_mut();
+        transform.rotation *= Quat::from_rotation_y(FRAC_PI_6)
+    } else if keys.just_pressed(KeyCode::KeyE) {
+        let mut transform = cameras.single_mut();
+        transform.rotation *= Quat::from_rotation_y(-FRAC_PI_6)
     }
 }
